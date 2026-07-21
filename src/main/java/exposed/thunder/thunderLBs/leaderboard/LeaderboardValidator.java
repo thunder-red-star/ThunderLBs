@@ -37,6 +37,14 @@ public final class LeaderboardValidator {
         if (settings.positions() < 1 || settings.positions() > MAX_POSITIONS) {
             error(issues, "settings.positions", "must be between 1 and " + MAX_POSITIONS);
         }
+        if (!Double.isFinite(settings.boardScale())
+                || settings.boardScale() < 0.1D || settings.boardScale() > 5.0D) {
+            error(issues, "settings.board-scale", "must be between 0.1 and 5.0");
+        }
+        if (!Double.isFinite(settings.rowYOffset())
+                || settings.rowYOffset() < -5.0D || settings.rowYOffset() > 5.0D) {
+            error(issues, "settings.row-y-offset", "must be between -5.0 and 5.0");
+        }
         validatePositiveTiming(issues, "settings.page-duration-ticks", settings.pageDurationTicks());
         validatePositiveTiming(issues, "settings.interval-ticks", settings.intervalTicks());
         validateNonNegativeTiming(issues, "settings.row-delay-ticks", settings.rowDelayTicks());

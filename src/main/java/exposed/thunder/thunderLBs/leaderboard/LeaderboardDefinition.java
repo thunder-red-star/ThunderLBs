@@ -262,6 +262,10 @@ public final class LeaderboardDefinition {
         return animations;
     }
 
+    public void setAnimations(LeaderboardAnimations animations) {
+        this.animations = animations.copy();
+    }
+
     private static Display.Billboard parseBillboard(String value) {
         if (value == null || value.isEmpty()) {
             return Display.Billboard.FIXED;

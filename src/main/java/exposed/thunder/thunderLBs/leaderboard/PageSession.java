@@ -65,6 +65,7 @@ final class PageSession {
     private final int pageIndex;
     private final int totalPages;
     private final float viewRange;
+    private final float boardScale;
 
     PageSession(ThunderLBs plugin,
             PluginConfig config,
@@ -97,6 +98,7 @@ final class PageSession {
         this.barUseHolderColor = definition.barUseHolderColor();
         this.debugPlaceholders = plugin.hasPlaceholderDebugListeners();
         this.viewRange = Math.max(0.1F, definition.viewDistance() / 64.0F);
+        this.boardScale = (float) definition.settings().boardScale();
     }
 
     public void start() {
@@ -221,7 +223,8 @@ final class PageSession {
                 formattedValue = formattedValue + page.suffix();
             }
             String circledNumber = index <= circled.size() ? circled.get(index - 1) : String.valueOf(index);
-            double offsetY = config.defaults().rowStartOffset() - (index * config.defaults().rowSpacing());
+            double offsetY = scaledRowOffset(
+                    definition.settings().rowYOffset(), config.defaults().rowSpacing(), index, boardScale);
 
             String rowColor = config.formatting().rankColor(index, page.color());
             String renderedRow = renderRow(rowColor, circledNumber, playerName, formattedValue);
@@ -251,7 +254,7 @@ final class PageSession {
     private void spawnTitle(World world) {
         Location base = origin.clone();
         if (barMode == BarMode.NONE) {
-            base.add(0.0D, config.defaults().barOffsetY(), 0.0D);
+            base.add(0.0D, config.defaults().barOffsetY() * boardScale, 0.0D);
         }
         BoardDisplay display = spawnDisplay(base, baseOptions()
                 .shadowed(definition.textShadow())
@@ -338,7 +341,7 @@ final class PageSession {
     private void scheduleTitleAnimations(BoardDisplay display) {
         float[] frames = animationCache.titleInScale();
         LeaderboardAnimations.Title animation = definition.animations().title();
-        if (usesClientInterpolation(animation.enabled(), animation.inCurve(), frames.length)) {
+        if (usesClientInterpolation(animation.inEnabled(), animation.inCurve(), frames.length)) {
             float targetScale = frames[frames.length - 1];
             scheduleLinearTransition(
                     display,
@@ -365,7 +368,7 @@ final class PageSession {
         long delay = Math.max(1L, definition.settings().pageDurationTicks());
         float[] frames = animationCache.titleOutScale();
         LeaderboardAnimations.Title animation = definition.animations().title();
-        if (usesClientInterpolation(animation.enabled(), animation.outCurve(), frames.length)) {
+        if (usesClientInterpolation(animation.outEnabled(), animation.outCurve(), frames.length)) {
             float targetScale = frames[frames.length - 1];
             scheduleLinearTransition(
                     display,
@@ -389,7 +392,8 @@ final class PageSession {
     }
 
     private void applyScale(BoardDisplay display, float scale, byte opacity) {
-        display.transformAndOpacity(0.0F, 0.0F, 0.0F, scale, scale, scale, opacity);
+        float scaled = scale * boardScale;
+        display.transformAndOpacity(0.0F, 0.0F, 0.0F, scaled, scaled, scaled, opacity);
     }
 
     // ------------------------------------------------------------------ bar
@@ -404,13 +408,14 @@ final class PageSession {
     }
 
     private void spawnDots(World world) {
-        Location anchor = origin.clone().add(0.0D, config.defaults().barOffsetY(), 0.0D);
+        Location anchor = origin.clone().add(0.0D, config.defaults().barOffsetY() * boardScale, 0.0D);
         spawnDisplay(anchor, baseOptions()
                 .shadowed(false)
                 .opacity(packOpacity(OPACITY_OPAQUE))
                 .text(buildDotsComponent())
                 .interpolationDuration(TITLE_INTERPOLATION)
-                .teleportDuration(TITLE_INTERPOLATION));
+                .teleportDuration(TITLE_INTERPOLATION)
+                .scale(boardScale, boardScale, boardScale));
     }
 
     private Component buildDotsComponent() {
@@ -434,7 +439,7 @@ final class PageSession {
     }
 
     private void spawnFillBar(World world) {
-        Location anchor = origin.clone().add(0.0D, config.defaults().barOffsetY(), 0.0D);
+        Location anchor = origin.clone().add(0.0D, config.defaults().barOffsetY() * boardScale, 0.0D);
         String foregroundColor = barUseHolderColor ? page.color() : null;
         boolean clientInterpolated = usesClientInterpolatedBar();
         BarPair pair = spawnBarPair(world, anchor, foregroundColor, clientInterpolated);
@@ -455,7 +460,7 @@ final class PageSession {
                 .opacity(packOpacity(OPACITY_TRANSPARENT))
                 .interpolationDuration(BAR_INITIAL_INTERPOLATION)
                 .teleportDuration(BAR_INITIAL_INTERPOLATION)
-                .scale(1.0F, 2.0F, 1.0F));
+                .scale(boardScale, 2.0F * boardScale, boardScale));
 
         BoardDisplay value = spawnDisplay(valueLocation, baseOptions()
                 .shadowed(false)
@@ -463,7 +468,7 @@ final class PageSession {
                 .opacity(packOpacity(valueInitiallyOpaque ? OPACITY_OPAQUE : OPACITY_TRANSPARENT))
                 .interpolationDuration(BAR_INITIAL_INTERPOLATION)
                 .teleportDuration(BAR_INITIAL_INTERPOLATION)
-                .scale(0.0F, 2.0F, 1.0F));
+                .scale(0.0F, 2.0F * boardScale, boardScale));
 
         BarPair pair = new BarPair(container, value);
         applyBarFrame(pair, 0.0F, -1.0F);
@@ -615,6 +620,10 @@ final class PageSession {
         return enabled && easing == EasingType.LINEAR && frameCount > 1;
     }
 
+    static double scaledRowOffset(double rowYOffset, double rowSpacing, int index, double boardScale) {
+        return (rowYOffset - (index * rowSpacing)) * boardScale;
+    }
+
     static long barFadeDelayTicks(long intervalTicks, long cycleTicks, int fadeTicks) {
         return Math.max(1L, intervalTicks - cycleTicks - Math.max(1, fadeTicks));
     }
@@ -624,7 +633,7 @@ final class PageSession {
         if (direction.lengthSquared() == 0) {
             direction = new Vector(0, 0, 1);
         }
-        direction.normalize().multiply(BAR_DEPTH_OFFSET);
+        direction.normalize().multiply(BAR_DEPTH_OFFSET * boardScale);
         Location valueLocation = containerLocation.clone().add(direction);
         if ((valueLocation.getBlockX() >> 4) != (containerLocation.getBlockX() >> 4)
                 || (valueLocation.getBlockZ() >> 4) != (containerLocation.getBlockZ() >> 4)) {
@@ -699,7 +708,8 @@ final class PageSession {
         float translationFactor = Float.isNaN(translationValue) ? (-1.0F + clampedProgress) : translationValue;
         float offset = Math.max(-1.0F, Math.min(1.0F, translationFactor));
         BoardDisplay value = pair.value();
-        value.transform(offset, 0.0F, 0.0F, clampedProgress, 2.0F, 1.0F);
+        value.transform(offset * boardScale, 0.0F, 0.0F,
+                clampedProgress * boardScale, 2.0F * boardScale, boardScale);
     }
 
     // ----------------------------------------------------------------- rows
@@ -734,7 +744,8 @@ final class PageSession {
                 .opacity(packOpacity(OPACITY_TRANSPARENT))
                 .interpolationDuration(ROW_INTERPOLATION)
                 .teleportDuration(ROW_INTERPOLATION)
-                .translation(startOffset, 0.0F, 0.0F));
+                .translation(startOffset * boardScale, 0.0F, 0.0F)
+                .scale(boardScale, boardScale, boardScale));
         animateRow(row);
     }
 
@@ -745,7 +756,7 @@ final class PageSession {
     private void animateRow(BoardDisplay display) {
         float[] offsets = animationCache.rowInOffsets();
         LeaderboardAnimations.Row animation = definition.animations().row();
-        if (usesClientInterpolation(animation.enabled(), animation.inCurve(), offsets.length)) {
+        if (usesClientInterpolation(animation.inEnabled(), animation.inCurve(), offsets.length)) {
             float targetOffset = offsets[offsets.length - 1];
             scheduleLinearTransition(
                     display,
@@ -772,7 +783,7 @@ final class PageSession {
         long delay = Math.max(1L, definition.settings().pageDurationTicks());
         float[] offsets = animationCache.rowOutOffsets();
         LeaderboardAnimations.Row animation = definition.animations().row();
-        if (usesClientInterpolation(animation.enabled(), animation.outCurve(), offsets.length)) {
+        if (usesClientInterpolation(animation.outEnabled(), animation.outCurve(), offsets.length)) {
             float targetOffset = offsets[offsets.length - 1];
             scheduleLinearTransition(
                     display,
@@ -796,7 +807,8 @@ final class PageSession {
     }
 
     private void applyRowTransform(BoardDisplay display, float offset, byte opacity) {
-        display.transformAndOpacity(offset, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, opacity);
+        display.transformAndOpacity(offset * boardScale, 0.0F, 0.0F,
+                boardScale, boardScale, boardScale, opacity);
     }
 
     private void scheduleFrameAnimation(BoardDisplay display,
@@ -891,7 +903,7 @@ final class PageSession {
     private boolean usesClientInterpolatedTitleEntrance() {
         LeaderboardAnimations.Title animation = definition.animations().title();
         return usesClientInterpolation(
-                animation.enabled(),
+                animation.inEnabled(),
                 animation.inCurve(),
                 animationCache.titleInScale().length);
     }

@@ -16,7 +16,7 @@ public final class AnimationCache {
         LeaderboardAnimations.Bar bar = animations.bar();
 
         this.titleInScale = computeScaleFrames(
-                title.enabled(),
+                title.inEnabled(),
                 title.inFrames(),
                 title.inCurve(),
                 title.scale(),
@@ -24,7 +24,7 @@ public final class AnimationCache {
                 true
         );
         this.titleOutScale = computeScaleFrames(
-                title.enabled(),
+                title.outEnabled(),
                 title.outFrames(),
                 title.outCurve(),
                 title.scale(),
@@ -32,7 +32,7 @@ public final class AnimationCache {
                 false
         );
         this.rowInOffsets = computeRowFrames(
-                row.enabled(),
+                row.inEnabled(),
                 row.inFrames(),
                 row.inCurve(),
                 row.startOffset(),
@@ -40,7 +40,7 @@ public final class AnimationCache {
                 true
         );
         this.rowOutOffsets = computeRowFrames(
-                row.enabled(),
+                row.outEnabled(),
                 row.outFrames(),
                 row.outCurve(),
                 0.0D,

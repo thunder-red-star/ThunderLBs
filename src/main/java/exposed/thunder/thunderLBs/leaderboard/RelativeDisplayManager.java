@@ -38,9 +38,12 @@ public final class RelativeDisplayManager {
     private final Location displayLocation;
     private final double rangeSquared;
     private final long refreshTicks;
+    private final float boardScale;
     private final Map<UUID, BoardDisplay> playerDisplays = new HashMap<>();
     private final Map<UUID, String> lastRenderedContent = new HashMap<>();
     private final List<TaskHandle> animationTasks = new ArrayList<>();
+    private final List<TaskHandle> retirementTasks = new ArrayList<>();
+    private final Set<BoardDisplay> retiringDisplays = new HashSet<>();
     private final RegionTaskScheduler scheduler;
     private volatile LeaderboardPage activePage;
     private volatile ContentContext contentContext;
@@ -48,7 +51,6 @@ public final class RelativeDisplayManager {
     private float animationOffset;
     private byte animationOpacity = packOpacity(OPACITY_TRANSPARENT);
     private LinearTransition linearTransition;
-    private boolean pageExitComplete;
     private boolean warnedUnsupported;
 
     public RelativeDisplayManager(ThunderLBs plugin, Leaderboard leaderboard, PlaceholderBridge placeholderBridge) {
@@ -58,6 +60,7 @@ public final class RelativeDisplayManager {
         this.definition = leaderboard.definition();
         this.origin = leaderboard.origin();
         this.world = leaderboard.world();
+        this.boardScale = (float) definition.settings().boardScale();
         this.displayLocation = calculateLocation(definition);
         this.rangeSquared = leaderboard.rangeSquared();
         this.refreshTicks = plugin.getPluginConfig().performance().relativeRefreshTicks();
@@ -76,9 +79,9 @@ public final class RelativeDisplayManager {
     public void stop() {
         stopTask();
         cancelAnimationTasks();
+        cancelRetirementTasks();
         activePage = null;
         contentContext = null;
-        pageExitComplete = false;
         cleanup();
     }
 
@@ -99,6 +102,15 @@ public final class RelativeDisplayManager {
         linearTransition = null;
     }
 
+    private void cancelRetirementTasks() {
+        for (TaskHandle task : retirementTasks) {
+            if (task != null && !task.isCancelled()) {
+                task.cancel();
+            }
+        }
+        retirementTasks.clear();
+    }
+
     public void cleanup() {
         for (BoardDisplay display : playerDisplays.values()) {
             if (display != null) {
@@ -108,18 +120,31 @@ public final class RelativeDisplayManager {
         }
         playerDisplays.clear();
         lastRenderedContent.clear();
+        for (BoardDisplay display : retiringDisplays) {
+            leaderboard.untrack(display);
+            display.remove();
+        }
+        retiringDisplays.clear();
     }
 
     public void updatePage(LeaderboardPage page) {
+        List<BoardDisplay> outgoingDisplays = detachPlayerDisplays();
         ContentContext nextContext = createContentContext(page);
         activatePage(page, nextContext, entranceDelay());
+        retireDisplays(outgoingDisplays);
         refresh();
+    }
+
+    private List<BoardDisplay> detachPlayerDisplays() {
+        List<BoardDisplay> displays = new ArrayList<>(playerDisplays.values());
+        playerDisplays.clear();
+        lastRenderedContent.clear();
+        return displays;
     }
 
     private void activatePage(LeaderboardPage page, ContentContext context, long delay) {
         activePage = page;
         contentContext = context;
-        pageExitComplete = false;
         startPageAnimation(delay);
     }
 
@@ -134,7 +159,7 @@ public final class RelativeDisplayManager {
         float initialOffset = offsets.length == 0 ? 0.0F : offsets[0];
         applyAnimationState(initialOffset, packOpacity(OPACITY_TRANSPARENT));
         LeaderboardAnimations.Row animation = definition.animations().row();
-        if (PageSession.usesClientInterpolation(animation.enabled(), animation.inCurve(), offsets.length)) {
+        if (PageSession.usesClientInterpolation(animation.inEnabled(), animation.inCurve(), offsets.length)) {
             float targetOffset = offsets[offsets.length - 1];
             scheduleLinearTransition(
                     Math.max(1L, entranceDelay),
@@ -172,14 +197,14 @@ public final class RelativeDisplayManager {
         float[] offsets = leaderboard.animationCache().rowOutOffsets();
         long delay = Math.max(1L, leaderboard.definition().settings().pageDurationTicks());
         LeaderboardAnimations.Row animation = definition.animations().row();
-        if (PageSession.usesClientInterpolation(animation.enabled(), animation.outCurve(), offsets.length)) {
+        if (PageSession.usesClientInterpolation(animation.outEnabled(), animation.outCurve(), offsets.length)) {
             float targetOffset = offsets[offsets.length - 1];
             scheduleLinearTransition(
                     delay,
                     offsets.length,
                     targetOffset,
                     packOpacity(OPACITY_TRANSPARENT),
-                    () -> pageExitComplete = true
+                    () -> {}
             );
             return;
         }
@@ -192,7 +217,6 @@ public final class RelativeDisplayManager {
                     task.cancel();
                     float finalOffset = offsets.length == 0 ? 0.0F : offsets[offsets.length - 1];
                     applyAnimationState(finalOffset, packOpacity(OPACITY_TRANSPARENT));
-                    pageExitComplete = true;
                     return;
                 }
                 applyAnimationState(
@@ -205,6 +229,70 @@ public final class RelativeDisplayManager {
         animationTasks.add(exit);
     }
 
+    private void retireDisplays(List<BoardDisplay> displays) {
+        if (displays.isEmpty()) {
+            return;
+        }
+        retirementTasks.removeIf(TaskHandle::isCancelled);
+        retiringDisplays.addAll(displays);
+
+        float[] offsets = leaderboard.animationCache().rowOutOffsets();
+        LeaderboardAnimations.Row animation = definition.animations().row();
+        if (PageSession.usesClientInterpolation(animation.outEnabled(), animation.outCurve(), offsets.length)) {
+            float targetOffset = offsets[offsets.length - 1];
+            for (BoardDisplay display : displays) {
+                if (display == null || display.isRemoved()) {
+                    continue;
+                }
+                display.interpolation(0, PageSession.linearInterpolationTicks(offsets.length));
+                applyRetiringState(display, targetOffset, packOpacity(OPACITY_TRANSPARENT));
+            }
+            TaskHandle cleanup = scheduler.runDelayed(origin, task -> {
+                task.cancel();
+                removeRetiringDisplays(displays);
+            }, PageSession.linearCompletionDelayTicks(offsets.length));
+            retirementTasks.add(cleanup);
+            return;
+        }
+
+        TaskHandle exit = scheduler.runAtFixedRate(origin, new java.util.function.Consumer<>() {
+            private int frame;
+
+            @Override
+            public void accept(TaskHandle task) {
+                if (frame >= offsets.length) {
+                    task.cancel();
+                    removeRetiringDisplays(displays);
+                    return;
+                }
+                for (BoardDisplay display : displays) {
+                    if (display == null || display.isRemoved()) {
+                        continue;
+                    }
+                    display.interpolation(0, ANIMATION_INTERPOLATION_TICKS);
+                    applyRetiringState(display, offsets[frame], opacityAtFrame(frame, offsets.length, false));
+                }
+                frame++;
+            }
+        }, 1L, 1L);
+        retirementTasks.add(exit);
+    }
+
+    private void applyRetiringState(BoardDisplay display, float offset, byte opacity) {
+        display.transformAndOpacity(offset * boardScale, 0.0F, 0.0F,
+                boardScale, boardScale, boardScale, opacity);
+    }
+
+    private void removeRetiringDisplays(List<BoardDisplay> displays) {
+        for (BoardDisplay display : displays) {
+            if (display == null || !retiringDisplays.remove(display)) {
+                continue;
+            }
+            leaderboard.untrack(display);
+            display.remove();
+        }
+    }
+
     private void applyAnimationState(float offset, byte opacity) {
         linearTransition = null;
         this.animationOffset = offset;
@@ -214,7 +302,8 @@ public final class RelativeDisplayManager {
                 continue;
             }
             display.interpolation(0, ANIMATION_INTERPOLATION_TICKS);
-            display.transformAndOpacity(offset, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, opacity);
+            display.transformAndOpacity(offset * boardScale, 0.0F, 0.0F,
+                    boardScale, boardScale, boardScale, opacity);
         }
     }
 
@@ -272,12 +361,12 @@ public final class RelativeDisplayManager {
         }
         display.interpolation(0, Math.max(1, remainingTicks));
         display.transformAndOpacity(
-                transition.targetOffset(),
+                transition.targetOffset() * boardScale,
                 0.0F,
                 0.0F,
-                1.0F,
-                1.0F,
-                1.0F,
+                boardScale,
+                boardScale,
+                boardScale,
                 transition.targetOpacity());
     }
 
@@ -377,10 +466,10 @@ public final class RelativeDisplayManager {
     private Location calculateLocation(LeaderboardDefinition def) {
         PluginConfig.Defaults defaults = plugin.getPluginConfig().defaults();
         int positions = Math.max(1, def.settings().positions());
-        double offsetY = defaults.rowStartOffset()
+        double offsetY = def.settings().rowYOffset()
                 - ((positions + 1) * defaults.rowSpacing())
                 + defaults.relativeOffset();
-        return origin.clone().add(0, offsetY, 0);
+        return origin.clone().add(0, offsetY * boardScale, 0);
     }
 
     private BoardDisplay spawnDisplay(Player viewer) {
@@ -391,7 +480,8 @@ public final class RelativeDisplayManager {
                 .opacity(animation.opacity())
                 .interpolationDuration(ANIMATION_INTERPOLATION_TICKS)
                 .teleportDuration(GLIDE_TICKS)
-                .translation(animation.offset(), 0.0F, 0.0F)
+                .translation(animation.offset() * boardScale, 0.0F, 0.0F)
+                .scale(boardScale, boardScale, boardScale)
                 .viewRange(Math.max(0.1F, definition.viewDistance() / 64.0F))
                 .viewer(viewer));
         leaderboard.track(display);
@@ -409,12 +499,12 @@ public final class RelativeDisplayManager {
                 if (current.remainingTicks() <= 0) {
                     display.interpolation(0, ANIMATION_INTERPOLATION_TICKS);
                     display.transformAndOpacity(
-                            expected.targetOffset(),
+                            expected.targetOffset() * boardScale,
                             0.0F,
                             0.0F,
-                            1.0F,
-                            1.0F,
-                            1.0F,
+                            boardScale,
+                            boardScale,
+                            boardScale,
                             expected.targetOpacity());
                     return;
                 }

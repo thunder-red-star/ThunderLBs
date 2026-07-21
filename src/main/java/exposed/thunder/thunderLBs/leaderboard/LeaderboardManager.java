@@ -161,7 +161,9 @@ public final class LeaderboardManager {
                 config.defaults().intervalTicks(),
                 config.defaults().rowDelayTicks(),
                 config.defaults().typingIntervalTicks(),
-                true);
+                true,
+                1.0D,
+                config.defaults().rowStartOffset());
         LeaderboardFormatting formatting = new LeaderboardFormatting(
                 config.formatting().title(),
                 config.formatting().row(),

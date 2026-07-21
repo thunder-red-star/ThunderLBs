@@ -61,7 +61,8 @@ public final class LeaderboardAnimations {
     }
 
     public static final class Title {
-        private boolean enabled;
+        private boolean inEnabled;
+        private boolean outEnabled;
         private int inFrames;
         private int outFrames;
         private EasingType inCurve;
@@ -69,14 +70,16 @@ public final class LeaderboardAnimations {
         private double scale;
         private double overshoot;
 
-        private Title(boolean enabled,
+        private Title(boolean inEnabled,
+                      boolean outEnabled,
                       int inFrames,
                       int outFrames,
                       EasingType inCurve,
                       EasingType outCurve,
                       double scale,
                       double overshoot) {
-            this.enabled = enabled;
+            this.inEnabled = inEnabled;
+            this.outEnabled = outEnabled;
             this.inFrames = Math.max(1, inFrames);
             this.outFrames = Math.max(1, outFrames);
             this.inCurve = Objects.requireNonNullElse(inCurve, EasingType.LINEAR);
@@ -87,6 +90,8 @@ public final class LeaderboardAnimations {
 
         public static Title from(ConfigurationSection section, PluginConfig.Animation.Title defaults) {
             boolean enabled = section == null || section.getBoolean("enabled", true);
+            boolean inEnabled = section == null || section.getBoolean("in-enabled", enabled);
+            boolean outEnabled = section == null || section.getBoolean("out-enabled", enabled);
             int inFrames = defaults.inFrames();
             int outFrames = defaults.outFrames();
             EasingType defaultIn = defaults.inEasing();
@@ -104,22 +109,40 @@ public final class LeaderboardAnimations {
                 defaultIn = EasingType.fromFriendly(inCurve, defaultIn);
                 defaultOut = EasingType.fromFriendly(outCurve, defaultOut);
                 if (global != null && global.equalsIgnoreCase("none")) {
-                    enabled = false;
+                    inEnabled = false;
+                    outEnabled = false;
                 }
             }
-            return new Title(enabled, inFrames, outFrames, defaultIn, defaultOut, scale, overshoot);
+            return new Title(inEnabled, outEnabled, inFrames, outFrames, defaultIn, defaultOut, scale, overshoot);
         }
 
         public Title copy() {
-            return new Title(enabled, inFrames, outFrames, inCurve, outCurve, scale, overshoot);
+            return new Title(inEnabled, outEnabled, inFrames, outFrames, inCurve, outCurve, scale, overshoot);
         }
 
         public boolean enabled() {
-            return enabled;
+            return inEnabled || outEnabled;
         }
 
         public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
+            this.inEnabled = enabled;
+            this.outEnabled = enabled;
+        }
+
+        public boolean inEnabled() {
+            return inEnabled;
+        }
+
+        public void setInEnabled(boolean inEnabled) {
+            this.inEnabled = inEnabled;
+        }
+
+        public boolean outEnabled() {
+            return outEnabled;
+        }
+
+        public void setOutEnabled(boolean outEnabled) {
+            this.outEnabled = outEnabled;
         }
 
         public int inFrames() {
@@ -171,7 +194,9 @@ public final class LeaderboardAnimations {
         }
 
         private static void serialize(ConfigurationSection section, Title title) {
-            section.set("enabled", title.enabled);
+            section.set("enabled", title.enabled());
+            section.set("in-enabled", title.inEnabled);
+            section.set("out-enabled", title.outEnabled);
             section.set("frames-in", title.inFrames);
             section.set("frames-out", title.outFrames);
             section.set("in-curve", title.inCurve.name().toLowerCase(Locale.ROOT));
@@ -182,7 +207,8 @@ public final class LeaderboardAnimations {
     }
 
     public static final class Row {
-        private boolean enabled;
+        private boolean inEnabled;
+        private boolean outEnabled;
         private int inFrames;
         private int outFrames;
         private EasingType inCurve;
@@ -190,14 +216,16 @@ public final class LeaderboardAnimations {
         private double startOffset;
         private double distance;
 
-        private Row(boolean enabled,
+        private Row(boolean inEnabled,
+                    boolean outEnabled,
                     int inFrames,
                     int outFrames,
                     EasingType inCurve,
                     EasingType outCurve,
                     double startOffset,
                     double distance) {
-            this.enabled = enabled;
+            this.inEnabled = inEnabled;
+            this.outEnabled = outEnabled;
             this.inFrames = Math.max(1, inFrames);
             this.outFrames = Math.max(1, outFrames);
             this.inCurve = Objects.requireNonNullElse(inCurve, EasingType.LINEAR);
@@ -208,6 +236,8 @@ public final class LeaderboardAnimations {
 
         public static Row from(ConfigurationSection section, PluginConfig.Animation.Row defaults) {
             boolean enabled = section == null || section.getBoolean("enabled", true);
+            boolean inEnabled = section == null || section.getBoolean("in-enabled", enabled);
+            boolean outEnabled = section == null || section.getBoolean("out-enabled", enabled);
             int inFrames = defaults.inFrames();
             int outFrames = defaults.outFrames();
             EasingType inCurve = defaults.inEasing();
@@ -223,22 +253,40 @@ public final class LeaderboardAnimations {
                 inCurve = EasingType.fromFriendly(section.getString("in-curve", global), inCurve);
                 outCurve = EasingType.fromFriendly(section.getString("out-curve", global), outCurve);
                 if (global != null && global.equalsIgnoreCase("none")) {
-                    enabled = false;
+                    inEnabled = false;
+                    outEnabled = false;
                 }
             }
-            return new Row(enabled, inFrames, outFrames, inCurve, outCurve, startOffset, distance);
+            return new Row(inEnabled, outEnabled, inFrames, outFrames, inCurve, outCurve, startOffset, distance);
         }
 
         public Row copy() {
-            return new Row(enabled, inFrames, outFrames, inCurve, outCurve, startOffset, distance);
+            return new Row(inEnabled, outEnabled, inFrames, outFrames, inCurve, outCurve, startOffset, distance);
         }
 
         public boolean enabled() {
-            return enabled;
+            return inEnabled || outEnabled;
         }
 
         public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
+            this.inEnabled = enabled;
+            this.outEnabled = enabled;
+        }
+
+        public boolean inEnabled() {
+            return inEnabled;
+        }
+
+        public void setInEnabled(boolean inEnabled) {
+            this.inEnabled = inEnabled;
+        }
+
+        public boolean outEnabled() {
+            return outEnabled;
+        }
+
+        public void setOutEnabled(boolean outEnabled) {
+            this.outEnabled = outEnabled;
         }
 
         public int inFrames() {
@@ -290,7 +338,9 @@ public final class LeaderboardAnimations {
         }
 
         private static void serialize(ConfigurationSection section, Row row) {
-            section.set("enabled", row.enabled);
+            section.set("enabled", row.enabled());
+            section.set("in-enabled", row.inEnabled);
+            section.set("out-enabled", row.outEnabled);
             section.set("frames-in", row.inFrames);
             section.set("frames-out", row.outFrames);
             section.set("in-curve", row.inCurve.name().toLowerCase(Locale.ROOT));

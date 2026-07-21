@@ -111,10 +111,10 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
 
         List<ActionButton> actions = new ArrayList<>();
         actions.add(button("Layout",
-                "Configure how many positions are shown, the viewing distance, and the viewer's relative rank line.", ACCENT,
+                "Configure positions, viewing distance, row placement, and the viewer's relative rank line.", ACCENT,
                 (response, editor) -> openLayout(editor, id)));
         actions.add(button("Appearance",
-                "Customize the page bar, text shadow, holder colors, and the direction the board faces.", ACCENT,
+                "Customize board scale, the page bar, text shadow, holder colors, and facing direction.", ACCENT,
                 (response, editor) -> openAppearance(editor, id)));
         actions.add(button(holderMenuLabel(definition.pages().size()),
                 "Manage the holder pages displayed by this leaderboard. You can add, edit, remove, or reorder them.",
@@ -123,11 +123,14 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
                 "Adjust page duration, refresh frequency, row entrance delay, and title typing speed.", ACCENT,
                 (response, editor) -> openTiming(editor, id)));
         actions.add(button("Animations",
-                "Choose the easing styles used by title, row, and page-progress animations.", ACCENT,
+                "Choose the easing styles used by title and row entrances and exits, plus page progress.", ACCENT,
                 (response, editor) -> openAnimations(editor, id)));
         actions.add(button("Location",
                 "Change the board's coordinates and rotation, or position it using your current location.", ACCENT,
                 (response, editor) -> openLocation(editor, id)));
+        actions.add(button("Reset Animations",
+                "Restore every animation option on this board to the defaults from config.yml.", DANGER,
+                (response, editor) -> resetAnimations(editor, id)));
         actions.add(button(
                 definition.enabled() ? "Disable board" : "Enable board",
                 definition.enabled()
@@ -164,6 +167,11 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
                         .initial((float) definition.viewDistance())
                         .width(INPUT_WIDTH)
                         .build(),
+                DialogInput.numberRange("row_y_offset", Component.text("Row y offset", ACCENT), -5.0F, 5.0F)
+                        .step(0.05F)
+                        .initial((float) settings.rowYOffset())
+                        .width(INPUT_WIDTH)
+                        .build(),
                 DialogInput.bool("relative", Component.text("Show viewer rank line", ACCENT),
                         settings.showRelativePosition(), "true", "false")
         );
@@ -179,6 +187,8 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
                     }
                     current.settings().setPositions(Math.round(number(response, "positions", 1.0F)));
                     current.setViewDistance(Math.round(number(response, "view_distance", 4.0F)));
+                    current.settings().setRowYOffset(number(response, "row_y_offset",
+                            (float) current.settings().rowYOffset()));
                     current.settings().setShowRelativePosition(bool(response, "relative", false));
                     finishSave(editor, current, () -> openBoard(editor, id), () -> openLayout(editor, id));
                 },
@@ -192,6 +202,11 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
             return;
         }
         List<DialogInput> inputs = List.of(
+                DialogInput.numberRange("board_scale", Component.text("Board scale", ACCENT), 0.1F, 5.0F)
+                        .step(0.1F)
+                        .initial((float) definition.settings().boardScale())
+                        .width(INPUT_WIDTH)
+                        .build(),
                 select("bar", "Page bar", enumOptions(BarMode.values(), definition.barMode().name())),
                 DialogInput.bool("holder_color", Component.text("Use holder color for the bar", ACCENT),
                         definition.barUseHolderColor(), "true", "false"),
@@ -212,6 +227,8 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
                     if (current == null) {
                         return;
                     }
+                    current.settings().setBoardScale(number(response, "board_scale",
+                            (float) current.settings().boardScale()));
                     BarMode barMode = BarMode.fromString(text(response, "bar"), current.barMode());
                     current.setBarSettings(barMode, bool(response, "holder_color", current.barUseHolderColor()));
                     current.setTextShadow(bool(response, "text_shadow", current.textShadow()));
@@ -272,10 +289,14 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
         }
         LeaderboardAnimations animations = definition.animations();
         List<DialogInput> inputs = List.of(
-                select("title", "Title animation", easingOptions(
-                        animations.title().enabled(), animations.title().inCurve())),
-                select("rows", "Row animation", easingOptions(
-                        animations.row().enabled(), animations.row().inCurve())),
+                select("title_in", "Title in animation", easingOptions(
+                        animations.title().inEnabled(), animations.title().inCurve())),
+                select("title_out", "Title out animation", easingOptions(
+                        animations.title().outEnabled(), animations.title().outCurve())),
+                select("rows_in", "Row in animation", easingOptions(
+                        animations.row().inEnabled(), animations.row().inCurve())),
+                select("rows_out", "Row out animation", easingOptions(
+                        animations.row().outEnabled(), animations.row().outCurve())),
                 select("progress", "Progress animation", easingOptions(
                         animations.bar().enabled(), animations.bar().curve()))
         );
@@ -289,8 +310,10 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
                     if (current == null) {
                         return;
                     }
-                    applyAnimation(current.animations(), "title", text(response, "title"));
-                    applyAnimation(current.animations(), "rows", text(response, "rows"));
+                    applyAnimation(current.animations(), "title_in", text(response, "title_in"));
+                    applyAnimation(current.animations(), "title_out", text(response, "title_out"));
+                    applyAnimation(current.animations(), "rows_in", text(response, "rows_in"));
+                    applyAnimation(current.animations(), "rows_out", text(response, "rows_out"));
                     applyAnimation(current.animations(), "progress", text(response, "progress"));
                     finishSave(editor, current, () -> openBoard(editor, id), () -> openAnimations(editor, id));
                 },
@@ -327,6 +350,15 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
                 DialogType.multiAction(actions, button("Back", "Return to the main editor without moving the board.", NamedTextColor.GRAY,
                         (response, editor) -> openBoard(editor, id)), 2)
         ));
+    }
+
+    private void resetAnimations(Player player, String id) {
+        LeaderboardDefinition definition = definition(player, id);
+        if (definition == null) {
+            return;
+        }
+        definition.setAnimations(LeaderboardAnimations.defaults(plugin.getPluginConfig().animation()));
+        finishSave(player, definition, () -> openBoard(player, id), () -> openBoard(player, id));
     }
 
     private void saveCoordinates(Player player, String id, DialogResponseView response) {
@@ -828,17 +860,27 @@ public final class LeaderboardEditDialogs implements LeaderboardEditor {
         boolean enabled = !value.equalsIgnoreCase("none");
         EasingType easing = enabled ? EasingType.fromFriendly(value, EasingType.LINEAR) : EasingType.LINEAR;
         switch (part) {
-            case "title" -> {
-                animations.title().setEnabled(enabled);
+            case "title_in" -> {
+                animations.title().setInEnabled(enabled);
                 if (enabled) {
                     animations.title().setInCurve(easing);
+                }
+            }
+            case "title_out" -> {
+                animations.title().setOutEnabled(enabled);
+                if (enabled) {
                     animations.title().setOutCurve(easing);
                 }
             }
-            case "rows" -> {
-                animations.row().setEnabled(enabled);
+            case "rows_in" -> {
+                animations.row().setInEnabled(enabled);
                 if (enabled) {
                     animations.row().setInCurve(easing);
+                }
+            }
+            case "rows_out" -> {
+                animations.row().setOutEnabled(enabled);
+                if (enabled) {
                     animations.row().setOutCurve(easing);
                 }
             }

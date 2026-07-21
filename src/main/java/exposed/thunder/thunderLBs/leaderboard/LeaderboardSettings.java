@@ -10,19 +10,25 @@ public final class LeaderboardSettings {
     private long rowDelayTicks;
     private long typingIntervalTicks;
     private boolean showRelativePosition;
+    private double boardScale;
+    private double rowYOffset;
 
     public LeaderboardSettings(int positions,
             long pageDurationTicks,
             long intervalTicks,
             long rowDelayTicks,
             long typingIntervalTicks,
-            boolean showRelativePosition) {
+            boolean showRelativePosition,
+            double boardScale,
+            double rowYOffset) {
         this.positions = positions;
         this.pageDurationTicks = pageDurationTicks;
         this.intervalTicks = intervalTicks;
         this.rowDelayTicks = rowDelayTicks;
         this.typingIntervalTicks = typingIntervalTicks;
         this.showRelativePosition = showRelativePosition;
+        this.boardScale = boardScale;
+        this.rowYOffset = rowYOffset;
     }
 
     public static LeaderboardSettings from(ConfigurationSection section, PluginConfig config) {
@@ -34,7 +40,9 @@ public final class LeaderboardSettings {
                     defaults.intervalTicks(),
                     defaults.rowDelayTicks(),
                     defaults.typingIntervalTicks(),
-                    true);
+                    true,
+                    1.0D,
+                    defaults.rowStartOffset());
         }
         return new LeaderboardSettings(
                 section.getInt("positions", defaults.positions()),
@@ -42,7 +50,9 @@ public final class LeaderboardSettings {
                 section.getLong("interval-ticks", defaults.intervalTicks()),
                 section.getLong("row-delay-ticks", defaults.rowDelayTicks()),
                 section.getLong("typing-interval-ticks", defaults.typingIntervalTicks()),
-                section.getBoolean("show-relative-position", true));
+                section.getBoolean("show-relative-position", true),
+                section.getDouble("board-scale", 1.0D),
+                section.getDouble("row-y-offset", defaults.rowStartOffset()));
     }
 
     public void serialize(ConfigurationSection section) {
@@ -52,6 +62,8 @@ public final class LeaderboardSettings {
         section.set("row-delay-ticks", rowDelayTicks);
         section.set("typing-interval-ticks", typingIntervalTicks);
         section.set("show-relative-position", showRelativePosition);
+        section.set("board-scale", boardScale);
+        section.set("row-y-offset", rowYOffset);
     }
 
     public int positions() {
@@ -100,5 +112,21 @@ public final class LeaderboardSettings {
 
     public void setShowRelativePosition(boolean showRelativePosition) {
         this.showRelativePosition = showRelativePosition;
+    }
+
+    public double boardScale() {
+        return boardScale;
+    }
+
+    public void setBoardScale(double boardScale) {
+        this.boardScale = boardScale;
+    }
+
+    public double rowYOffset() {
+        return rowYOffset;
+    }
+
+    public void setRowYOffset(double rowYOffset) {
+        this.rowYOffset = rowYOffset;
     }
 }

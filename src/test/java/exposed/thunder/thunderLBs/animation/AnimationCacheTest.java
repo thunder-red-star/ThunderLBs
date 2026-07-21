@@ -52,6 +52,20 @@ class AnimationCacheTest {
         assertEquals(1.25F, frames[frames.length - 1]);
     }
 
+    @Test
+    void entranceAndExitCanBeDisabledIndependently() {
+        LeaderboardAnimations animations = animations(EasingType.EASE_IN_SINE);
+        animations.title().setInEnabled(false);
+        animations.row().setOutEnabled(false);
+
+        AnimationCache cache = new AnimationCache(animations);
+
+        assertEquals(1, cache.titleInScale().length);
+        assertEquals(20, cache.titleOutScale().length);
+        assertEquals(20, cache.rowInOffsets().length);
+        assertEquals(1, cache.rowOutOffsets().length);
+    }
+
     private static float max(float[] values) {
         float max = Float.NEGATIVE_INFINITY;
         for (float value : values) {

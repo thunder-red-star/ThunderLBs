@@ -62,6 +62,11 @@ class PageSessionTimingTest {
     }
 
     @Test
+    void boardScaleAppliesToRowOffsetAndSpacing() {
+        assertEquals(-2.25D, PageSession.scaledRowOffset(-0.8D, 0.325D, 1, 2.0D));
+    }
+
+    @Test
     void typingBroadcastKeepsConfiguredVolumeWithinNaturalRange() {
         assertEquals(0.5F, PageSession.typingBroadcastVolume(0.5F, 16.0D));
         assertEquals(2.0F, PageSession.typingBroadcastVolume(2.0F, 16.0D));

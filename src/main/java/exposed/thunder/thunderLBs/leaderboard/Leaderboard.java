@@ -139,7 +139,7 @@ public final class Leaderboard {
         LeaderboardPage page = definition.pages().get(currentPageIndex);
         pageIndex++;
 
-        stopActiveSessions();
+        retireStaleSessions();
         relativeDisplayManager.updatePage(page);
 
         PageSession session = new PageSession(plugin, config, placeholderBridge, animationCache, this, definition,
@@ -147,6 +147,13 @@ public final class Leaderboard {
         activeSessions.add(session);
         session.start();
         scheduleNextPage(interval);
+    }
+
+    private void retireStaleSessions() {
+        while (activeSessions.size() > 1) {
+            PageSession stale = activeSessions.remove(0);
+            stale.stop();
+        }
     }
 
     private void stopActiveSessions() {
